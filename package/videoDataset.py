@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import pickle
+from itertools import cycle
 from typing import List, Union, Tuple, Any
 import cv2
 from PIL import Image
@@ -19,7 +20,7 @@ torch.manual_seed(2022)
 
 
 # Helper Functions
-def readVideoCV(pth_video):
+def readVideo(pth_video):
     videoCapture = cv2.VideoCapture(pth_video)
 
     fps = videoCapture.get(cv2.CAP_PROP_FPS)
@@ -31,20 +32,13 @@ def readVideoCV(pth_video):
     while (videoCapture.isOpened()):
         ret, frame = videoCapture.read()
 
-        if ret: frames.append( Image.fromarray( cv2.cvtColor(frame,cv2.COLOR_BGR2RGB) ) )
+        if ret: frames.append( cv2.cvtColor(frame,cv2.COLOR_BGR2RGB) )
         else: break
     
     videoCapture.release()
     # print("video size:", size)
 
     return fps, size, fNUMS, frames
-
-
-def readVideoTV(pth_video, pts_unit='pts'):
-    video = torchvision.io.read_video(pth_video, pts_unit=pts_unit)
-    # print("video size:", size)
-
-    return video[0]
 
 
 
@@ -63,8 +57,8 @@ class VideoDataset(torch.utils.data.Dataset):
         pth_video = self.file_list.iloc[idx].file_pth
         label = self.file_list.iloc[idx].cls
 
-        fps, size, fNUMS, frames = readVideoCV(pth_video)
-        # frames = readVideoTV(pth_video, pts_unit='sec')
+        fps, size, fNUMS, frames = readVideo(pth_video)
+
 
         seed = np.random.randint(1e9)
         frames_tr = []
@@ -73,6 +67,13 @@ class VideoDataset(torch.utils.data.Dataset):
             np.random.seed(seed)
             frame = self.transform(frame)
             frames_tr.append(frame)
+
+        # print(fNUMS)
+        if fNUMS > 80: del frames_tr[80:]
+        elif fNUMS < 80: # repeat to length 80
+            frames_tr = [next( cycle(frames_tr) )for i in range(80)]
+        # print(len(frames_tr))
+        # print("-"*8)
 
         if len(frames_tr) > 0: frames_tr = torch.stack(frames_tr)
 
